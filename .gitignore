@@ -1,0 +1,21 @@
+# 环境变量（含API Key、服务器IP等敏感信息）
+.env
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# 日志
+*.log
+pm2-*.json
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 密钥文件
+*.key
+*.pem
+id_ed25519*
+shanghai_server
+hermes_link
