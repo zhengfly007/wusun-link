@@ -1,19 +1,19 @@
-# 环境变量（含API Key、服务器IP等敏感信息）
+# Environment variables (API keys, server IPs, etc.)
 .env
 
 # Node.js
 node_modules/
 npm-debug.log*
 
-# 日志
+# Logs
 *.log
 pm2-*.json
 
-# 系统文件
+# System files
 .DS_Store
 Thumbs.db
 
-# 密钥文件
+# Key files
 *.key
 *.pem
 id_ed25519*

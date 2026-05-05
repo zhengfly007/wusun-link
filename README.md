@@ -1,100 +1,97 @@
-# 无双链路 (Wusn Link)
+# Wusn Link
 
-**AI 大脑 + WSS 长连 + 远程执行器 — 跨服跨 NAT 的 Agent 编排架构**
+**AI Brain + WSS Bridge + Remote Executor — Cross-server, cross-NAT agent orchestration**
 
 ```
-创世纪(飞书/微信)
+User (Feishu/WeChat)
   │
-  ▼ 🇸🇬 新加坡 Hermes（大脑 — DeepSeek）
-  │  AI 拆解任务 → 并发发 WSS 请求
+  ▼ 🇸🇬 Singapore Hermes (Brain — DeepSeek)
+  │  AI task decomposition → concurrent WSS requests
   │
   ▼ WSS Bridge (:18806)
-  │  持久长连接，跨 NAT 双向通信
-  │  心跳检测 + 自动重连 + Map 并发派发
+  │  Persistent long connection, cross-NAT bidirectional
+  │  Heartbeat + auto-reconnect + Map-based concurrent dispatch
   │
-  ▼ 🇨🇳 上海 Keen（执行器 — OpenClaw）
-  │  带 78 个技能 (tavily 搜索 / web_fetch 等)
-  │  通过 Gateway WS 协议调用
+  ▼ 🇨🇳 Shanghai Keen (Executor — OpenClaw)
+  │  78 skills (tavily search / web_fetch / etc.)
+  │  Invoked via Gateway WebSocket protocol
   │
-  ▼ 结果回传 → 大脑整合输出
+  ▼ Results back → Brain aggregates & outputs
 ```
 
-## 架构特点
+## Why Wusn Link?
 
-| 特点 | 说明 |
-|------|------|
-| **跨服跨NAT** | 执行器主动出站连大脑，不需要公网IP或端口映射 |
-| **AI大脑动态拆解** | 不是YAML模板，是LLM实时分析并分片任务 |
-| **并发执行** | 多维度子任务同时发出，总耗时 ≈ 最慢子任务 |
-| **带技能执行器** | 远程Keen自带tavily搜索、web_fetch等78技能 |
-| **自愈能力** | 错误分类 + 自动重试 + 超时降级 |
-| **一键运维** | `bash wusn-deploy.sh check|fix|restart` |
+Existing multi-agent orchestration solutions (Hivemind, Orchemist, etc.) are all **local single-machine multi-process** — brain and hands on the same machine. But real-world scenarios demand **cross-server deployment**:
 
-## 为什么会存在
+- AI brain in Singapore (high-performance models) + executor in Shanghai (localized search/skills)
+- Brain on public cloud, executor inside corporate network
+- Executor connects outbound to the brain when public ports can't be opened
 
-现有的多Agent编排方案（Hivemind、Orchemist等）都是**本地单机多进程**模式——大脑和手脚在同一台机器上。但现实中有很多场景需要**跨服务器部署**：
+Wusn Link fills this gap — **the only known open-source architecture that completes the full loop: brain AI decomposition → WSS cross-NAT persistent connection → remote executor with skills → result aggregation.**
 
-- 新加坡AI大脑（高性能模型）+ 上海执行器（本地化搜索/技能）
-- 大脑在公有云，执行器在企业内网
-- 无法打通公网端口的情况下，让执行器主动出站连大脑
+## Architecture Highlights
 
-无双链路填补了这个空白。
+| Feature | Description |
+|---------|-------------|
+| **Cross-server, cross-NAT** | Executor connects outbound to brain; no public IP or port forwarding needed |
+| **AI brain dynamic decomposition** | Not YAML templates — LLM analyzes and shards tasks in real time |
+| **Concurrent execution** | Multi-dimension sub-tasks fire simultaneously; total time ≈ slowest sub-task |
+| **Executor with skills** | Remote Keen has 78 skills (tavily, web_fetch, etc.) |
+| **Self-healing** | Error classification + auto-retry + timeout degradation |
+| **One-command ops** | `bash wusn-deploy.sh check\|fix\|restart` |
 
-## 快速开始
+## Quick Start
 
-### 前置条件
+### Prerequisites
 
 - Node.js 18+
-- 两台服务器（大脑端 + 执行器端）
-- 执行器端需安装 OpenClaw Gateway
+- Two servers (brain side + executor side)
+- OpenClaw Gateway installed on the executor side
 
-### 1. 配置环境变量
+### 1. Configure Environment
 
 ```bash
 cp .env.example .env
-# 编辑 .env 填入你的服务器信息和API Key
+# Edit .env with your server info and API keys
 ```
 
-### 2. 大脑端（新加坡）
+### 2. Brain Side (Singapore)
 
 ```bash
-# 启动 WSS Server
+# Start WSS Server
 node wss-server.js
-# 或使用 PM2 管理
+# Or use PM2
 pm2 start wss-server.js --name wusn-bridge
 ```
 
-### 3. 执行器端（上海）
+### 3. Executor Side (Shanghai)
 
 ```bash
-# 启动 WSS Client（主动连接大脑）
+# Start WSS Client (connects outbound to brain)
 node wss-client.js
 ```
 
-### 4. 验证链路
+### 4. Verify the Link
 
 ```bash
 bash wusn-deploy.sh check
 ```
 
-## 核心组件
+## Core Components
 
-| 文件 | 作用 |
-|------|------|
-| `wss-server.js` | WSS 桥服务端 — 监听端口，转发任务，Map并发派发 |
-| `wss-client.js` | WSS 桥客户端 — 出站连服务端，通过Gateway WS调OpenClaw |
-| `wusn-deploy.sh` | 一键运维 — `check|fix|restart|deploy` |
-| `sg-router.SKILL.md` | 消息路由规则 — 触发词、并行、自愈策略 |
+| File | Purpose |
+|------|---------|
+| `wss-server.js` | WSS Bridge server — listens, forwards tasks, Map-based concurrent dispatch |
+| `wss-client.js` | WSS Bridge client — outbound connect, calls OpenClaw via Gateway WS |
+| `wusn-deploy.sh` | Ops script — `check\|fix\|restart\|deploy` |
 
-## 相似项目对比
+## Comparison
 
-| 项目 | 与本架构差异 |
-|------|------------|
-| Hivemind (89⭐) | 本地多进程编排，不走WSS跨服 |
-| Orchemist (0⭐) | 本地YAML Pipeline，单机编排 |
-| openclaw-coding-agent (2⭐) | SSH远程执行器，但无大脑编排层 |
-
-**无双链路是已知唯一实现「大脑AI拆解 → WSS跨NAT长连 → 远程执行器带技能执行 → 结果回传整合」完整闭环的开源架构。**
+| Project | Difference from Wusn Link |
+|---------|--------------------------|
+| Hivemind (89⭐) | Local multi-process orchestration, no WSS cross-server |
+| Orchemist (0⭐) | Local YAML pipeline, single-machine |
+| openclaw-coding-agent (2⭐) | SSH-based remote executor, no brain orchestration layer |
 
 ## License
 

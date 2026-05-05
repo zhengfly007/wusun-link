@@ -1,27 +1,27 @@
 #!/usr/bin/env node
 /**
- * 新加坡 WSS Bridge Server v4 — Map集中派发 + 心跳加固版
+ * WSS Bridge Server v4 — Map dispatch + hardened heartbeat
  * 
- * 监听 0.0.0.0:18806，接受上海 WSS Client 主动连接。
- * 上海作为 executor，Hermes 发来的 task 转发给上海。
+ * Listens on 0.0.0.0:18806, accepts Shanghai WSS Client connections.
+ * Shanghai acts as executor; tasks from Hermes are forwarded to Shanghai.
  * 
- * v4 改进（2026-05-04）：
- * - 移除 forwardTask + exec.on('message') 监听器泄漏方案
- * - 改用 Map<taskId, callback> 集中派发，零泄漏，天然支持并发
- * - executor断开时清理所有pending任务
+ * v4 improvements (2026-05-04):
+ * - Removed forwardTask + exec.on('message') listener leak approach
+ * - Switched to Map<taskId, callback> centralized dispatch — zero leak, native concurrency
+ * - Clean up all pending tasks when executor disconnects
  * 
- * 加固项：
- * 1. WebSocket ping/pong 心跳（每30s），连续3次无pong判定死连
- * 2. executor引用校验：发送前检查readyState
- * 3. 新executor连接时清理旧引用
+ * Hardening:
+ * 1. WebSocket ping/pong heartbeat (every 30s), 3 consecutive missed pongs = dead connection
+ * 2. Executor reference validation: check readyState before sending
+ * 3. Clean up old executor reference when new one connects
  */
 
-const WebSocket = require('/home/agentuser/node_modules/ws');
+const WebSocket = require('ws');
 const WS_PORT = parseInt(process.env.WSS_PORT || "18806");
 const WS_HOST = process.env.WSS_HOST || "0.0.0.0";
 const RESPONSE_TIMEOUT = parseInt(process.env.WSS_TIMEOUT || "300000"); // 5 min
 const PING_INTERVAL = 30000;     // 30s
-const PING_TIMEOUT = 90000;      // 连续3次无响应判定死连
+const PING_TIMEOUT = 90000;     // 3 consecutive missed pongs = dead connection
 
 let executor = null;
 const pending = new Map(); // taskId -> { timer }
@@ -29,7 +29,7 @@ const pending = new Map(); // taskId -> { timer }
 const wss = new WebSocket.Server({ port: WS_PORT, host: WS_HOST });
 log('[WSS] Listening on ' + WS_HOST + ':' + WS_PORT + ' (v4 Map dispatch)');
 
-// 心跳检测
+  // Heartbeat check
 setInterval(() => {
   log('[WSS] Heartbeat — executor: ' + (executor ? 'connected' : 'disconnected'));
   if (executor && executor.readyState !== WebSocket.OPEN) {
@@ -42,9 +42,9 @@ wss.on('connection', (ws, req) => {
   const ip = req.socket.remoteAddress;
   log('[WSS] Connection from ' + ip);
 
-  // 上海executor
+  // Shanghai executor
   if (process.env.SH_EXECUTOR_IP || "::ffff:127.0.0.1") {
-    // 如果已有旧executor，清理它
+    // If old executor exists, clean it up
     if (executor && executor !== ws) {
       try { executor.terminate(); } catch(e) {}
       log('[WSS] Old executor replaced');
@@ -57,7 +57,7 @@ wss.on('connection', (ws, req) => {
     ws.send(JSON.stringify({ type: 'welcome', role: 'commander' }));
   }
 
-  // === WebSocket ping/pong 心跳 ===
+  // === WebSocket ping/pong heartbeat ===
   let alive = true;
   let pingFailCount = 0;
   const pingTimer = setInterval(() => {
@@ -85,13 +85,13 @@ wss.on('connection', (ws, req) => {
     try { msg = JSON.parse(raw.toString()); } catch(e) { return; }
 
     if (ws === executor) {
-      // === Executor返回的结果 — 通过pending Map派发 ===
+      // === Executor result — dispatch via pending Map ===
       const entry = pending.get(msg.taskId);
       if (entry) {
         clearTimeout(entry.timer);
         pending.delete(msg.taskId);
-        // 找到等待这个taskId的commander，把结果转发过去
-        // 注意：commander引用存在msg里（发送时注入）
+        // Find the commander waiting for this taskId and forward the result
+        // Note: commander reference is stored in msg (injected at send time)
         if (entry.commander && entry.commander.readyState === WebSocket.OPEN) {
           entry.commander.send(JSON.stringify(msg));
           log('[WSS] Result for ' + msg.taskId + ' dispatched');
@@ -104,7 +104,7 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
-    // === Commander发来的新任务 ===
+    // === Commander sends new task ===
     const tid = msg.taskId || 'unknown';
     if (!executor || executor.readyState !== WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'result', taskId: tid, success: false, error: 'No executor connected' }));
@@ -113,7 +113,7 @@ wss.on('connection', (ws, req) => {
 
     log('[WSS] Forwarding task ' + tid + ' to Shanghai');
 
-    // 用Map注册等待器，保存commander引用用于回调
+    // Register waiter in Map, save commander reference for callback
     const timer = setTimeout(() => {
       const entry = pending.get(tid);
       if (entry) {
@@ -133,7 +133,7 @@ wss.on('connection', (ws, req) => {
     if (ws === executor) {
       executor = null;
       log('[WSS] Executor disconnected — clearing ' + pending.size + ' pending tasks');
-      // executor断开，所有pending任务都超时
+      // executor disconnects, all pending tasks time out
       for (const [tid, entry] of pending) {
         clearTimeout(entry.timer);
         if (entry.commander && entry.commander.readyState === WebSocket.OPEN) {
