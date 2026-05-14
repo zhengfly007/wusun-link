@@ -102,7 +102,7 @@ sh_status() {
   fi
 
   # Recent client log
-  local log=$(sh_cmd "sudo tail -3 \${SH_PM2_LOG:-/root/.pm2/logs/hermes-bridge-client-out.log} 2>/dev/null | grep -E 'Connected|Welcome|GW'")
+  local log=$(sh_cmd "sudo tail -3 \${SH_PM2_LOG:-\${PM2_LOG_PATH:-/var/log/hermes/client-out.log}} 2>/dev/null | grep -E 'Connected|Welcome|GW'")
   if [ -n "$log" ]; then
     ok "Recent log: $(echo "$log" | head -1)"
   else
@@ -141,7 +141,7 @@ sh_restart() {
 # ---- Full link test ----
 link_test() {
   info "=== Full link test ==="
-  local script="/tmp/wusn_deploy_test_$$.js"
+  local script="\${DEPLOY_TEST_SCRIPT:-/tmp/wusn_deploy_test}.js"
   cat > $script << 'JSEOF'
 const WebSocket = require('ws');
 const ws = new WebSocket('ws://127.0.0.1:18806');
