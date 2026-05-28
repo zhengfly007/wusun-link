@@ -22,7 +22,15 @@ def fetch(url):
         "User-Agent": "Hermes-Issue-Watcher/1.0",
     })
     # Pass gh auth token if available
+    import subprocess
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if not token:
+        try:
+            result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                token = result.stdout.strip()
+        except:
+            pass
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
